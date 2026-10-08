@@ -1,0 +1,137 @@
+rules_version = '2';
+// MSI Parcel — Firestore security rules (shared by Customer, Driver and Admin apps).
+// The server enforces these; the apps' own checks are only for convenience.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function userDoc() { return get(/databases/$(database)/documents/users/$(uid())); }
+    function role() { return signedIn() && exists(/databases/$(database)/documents/users/$(uid())) ? userDoc().data.role : ''; }
+    function isAdmin() { return role() == 'admin'; }
+    function driverDoc() { return get(/databases/$(database)/documents/drivers/$(uid())); }
+    function isApprovedDriver() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/drivers/$(uid()))
+        && driverDoc().data.status == 'approved';
+    }
+    function onlyChanges(fields) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(fields);
+    }
+
+    // ---------- users: one doc per account, role cannot be self-promoted
+    match /users/{userId} {
+      allow read: if signedIn() && (uid() == userId || isAdmin());
+      allow create: if signedIn() && uid() == userId
+        && request.resource.data.role in ['driver', 'customer'];
+      allow update: if isAdmin()
+        || (signedIn() && uid() == userId && request.resource.data.role == resource.data.role);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- drivers: self-registration, admin approval
+    match /drivers/{driverId} {
+      allow read: if isAdmin() || (signedIn() && uid() == driverId);
+
+      // New application: must start as pending and offline.
+      allow create: if signedIn() && uid() == driverId
+        && request.resource.data.status == 'pending'
+        && request.resource.data.online == false;
+
+      allow update: if isAdmin()
+        // Rejected driver re-sends the application.
+        || (signedIn() && uid() == driverId
+            && resource.data.status == 'rejected'
+            && request.resource.data.status == 'pending')
+        // Approved driver: only online status and live location.
+        || (signedIn() && uid() == driverId
+            && resource.data.status == 'approved'
+            && onlyChanges(['online', 'lastSeenAt', 'location', 'heading', 'speedMps', 'lastLocationAt']));
+
+      allow delete: if isAdmin();
+    }
+
+    // ---------- orders
+    match /orders/{orderId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.driverId == uid())
+        || (signedIn() && resource.data.customerId == uid());
+
+      // Customers create their own orders (Customer app); admin can too.
+      allow create: if isAdmin()
+        || (signedIn() && request.resource.data.customerId == uid()
+            && request.resource.data.status == 'pending'
+            && !('driverId' in request.resource.data && request.resource.data.driverId != ''));
+
+      // Driver: forward one step only, never to delivered (that needs the OTP, see Cloud Function).
+      allow update: if isAdmin()
+        || (isApprovedDriver()
+            && resource.data.driverId == uid()
+            && onlyChanges(['status', 'updatedAt'])
+            && ((resource.data.status == 'assigned' && request.resource.data.status == 'accepted')
+             || (resource.data.status == 'accepted' && request.resource.data.status == 'picked_up')
+             || (resource.data.status == 'picked_up' && request.resource.data.status == 'out_for_delivery')))
+        // Customer may cancel while nobody has picked it up.
+        || (signedIn() && resource.data.customerId == uid()
+            && resource.data.status == 'pending'
+            && request.resource.data.status == 'cancelled'
+            && onlyChanges(['status', 'updatedAt']));
+
+      allow delete: if isAdmin();
+
+      // Delivery code: customer and admin only. Drivers never read it.
+      match /private/{docId} {
+        allow read: if isAdmin()
+          || (signedIn() && get(/databases/$(database)/documents/orders/$(orderId)).data.customerId == uid());
+        allow write: if false; // written by Cloud Functions only
+      }
+    }
+
+    // ---------- audit trail
+    match /order_events/{eventId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        || (isApprovedDriver()
+            && request.resource.data.actorId == uid()
+            && get(/databases/$(database)/documents/orders/$(request.resource.data.orderId)).data.driverId == uid());
+      allow update, delete: if false;
+    }
+
+    // ---------- settings readable by every signed-in user, editable by admin
+    match /service_zones/{zoneId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+    match /pricing_rules/{ruleId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---------- money: written by Cloud Functions / admin only
+    match /cod_transactions/{txId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.driverId == uid());
+      allow write: if isAdmin();
+    }
+    // ---------- wallets: written only by Cloud Functions or admin
+    match /wallets/{walletUid} {
+      allow read: if isAdmin() || (signedIn() && uid() == walletUid);
+      allow write: if isAdmin();
+    }
+    match /wallet_transactions/{txId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == uid());
+      allow write: if isAdmin();
+    }
+    match /withdrawal_requests/{reqId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == uid());
+      allow create: if signedIn() && request.resource.data.uid == uid()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.amount is number && request.resource.data.amount > 0;
+      allow update, delete: if isAdmin();
+    }
+
+    match /driver_locations/{driverId} {
+      allow read: if isAdmin();
+      allow write: if signedIn() && uid() == driverId && isApprovedDriver();
+    }
+  }
+}
