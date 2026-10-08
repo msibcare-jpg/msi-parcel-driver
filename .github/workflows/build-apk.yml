@@ -858,12 +858,13 @@ jobs:
         run: |
           if grep -q "Firebase is not configured" lib/firebase_options.dart; then
             echo "Firebase not configured: building DEMO mode"
-            flutter build apk --release
+            flutter build apk --release --split-per-abi
           else
-            flutter build apk --release --dart-define=USE_FIREBASE=true
+            flutter build apk --release --split-per-abi --dart-define=USE_FIREBASE=true
           fi
+          ls -la build/app/outputs/flutter-apk/
           mkdir -p ../out
-          cp build/app/outputs/flutter-apk/app-release.apk ../out/MSI-Parcel-Driver.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../out/MSI-Parcel-Driver.apk
 
       - uses: actions/upload-artifact@v4
         with:
