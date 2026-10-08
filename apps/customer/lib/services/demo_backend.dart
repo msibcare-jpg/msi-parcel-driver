@@ -115,6 +115,10 @@ class DemoBackend implements Backend {
       deliveryFee: o.deliveryFee,
       notes: o.notes,
       createdAt: DateTime.now(),
+      pickupLat: o.pickupLat,
+      pickupLng: o.pickupLng,
+      dropoffLat: o.dropoffLat,
+      dropoffLng: o.dropoffLng,
     );
     _orders.add(order);
     _codes[id] = (1000 + _rnd.nextInt(9000)).toString();

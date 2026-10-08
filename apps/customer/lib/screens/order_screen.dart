@@ -269,6 +269,24 @@ class _OrderScreenState extends State<OrderScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 RouteLines(from: o.pickupAddress, to: o.dropoffAddress),
+                const SizedBox(height: 12),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => openMap(context, o.pickupAddress, lat: o.pickupLat, lng: o.pickupLng),
+                      icon: Icon(o.pickupLat != null ? Icons.push_pin : Icons.map_outlined, size: 18),
+                      label: const Text('Pickup'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => openMap(context, o.dropoffAddress, lat: o.dropoffLat, lng: o.dropoffLng),
+                      icon: Icon(o.dropoffLat != null ? Icons.push_pin : Icons.map_outlined, size: 18),
+                      label: const Text('Drop-off'),
+                    ),
+                  ),
+                ]),
                 const Divider(height: 28),
                 InfoRow('Receiver', '${o.receiverName} · ${o.receiverPhone}'),
                 InfoRow('Parcel', '${o.parcelType} · ${o.weightKg.toStringAsFixed(1)} kg'),

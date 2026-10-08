@@ -16,6 +16,8 @@ double _num(dynamic v) {
   return double.tryParse('${v ?? ''}') ?? 0;
 }
 
+double? _optNum(dynamic v) => v is num ? v.toDouble() : null;
+
 class CustomerProfile {
   final String uid;
   final String name;
@@ -66,6 +68,10 @@ class NewOrder {
   final double codAmount;
   final double deliveryFee;
   final String notes;
+  final double? pickupLat;
+  final double? pickupLng;
+  final double? dropoffLat;
+  final double? dropoffLng;
 
   const NewOrder({
     required this.city,
@@ -80,6 +86,10 @@ class NewOrder {
     required this.codAmount,
     required this.deliveryFee,
     required this.notes,
+    this.pickupLat,
+    this.pickupLng,
+    this.dropoffLat,
+    this.dropoffLng,
   });
 }
 
@@ -103,6 +113,10 @@ class ParcelOrder {
   final String driverPhone;
   final DateTime? createdAt;
   final DateTime? deliveredAt;
+  final double? pickupLat;
+  final double? pickupLng;
+  final double? dropoffLat;
+  final double? dropoffLng;
 
   const ParcelOrder({
     required this.id,
@@ -124,6 +138,10 @@ class ParcelOrder {
     this.driverPhone = '',
     this.createdAt,
     this.deliveredAt,
+    this.pickupLat,
+    this.pickupLng,
+    this.dropoffLat,
+    this.dropoffLng,
   });
 
   bool get hasCod => codAmount > 0;
@@ -151,6 +169,10 @@ class ParcelOrder {
       driverPhone: s('driverPhone'),
       createdAt: parseTime(m['createdAt']),
       deliveredAt: parseTime(m['deliveredAt']),
+      pickupLat: _optNum(m['pickupLat']),
+      pickupLng: _optNum(m['pickupLng']),
+      dropoffLat: _optNum(m['dropoffLat']),
+      dropoffLng: _optNum(m['dropoffLng']),
     );
   }
 
@@ -175,6 +197,10 @@ class ParcelOrder {
       driverPhone: driverPhone ?? this.driverPhone,
       createdAt: createdAt,
       deliveredAt: deliveredAt ?? this.deliveredAt,
+      pickupLat: pickupLat,
+      pickupLng: pickupLng,
+      dropoffLat: dropoffLat,
+      dropoffLng: dropoffLng,
     );
   }
 }

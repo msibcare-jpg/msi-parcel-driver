@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../models/models.dart';
 import '../services/backend.dart';
+import '../services/location_tools.dart';
 import '../ui/kit.dart';
+import 'map_picker_screen.dart';
 import 'order_screen.dart';
 
 /// Book a delivery: pickup, drop-off, parcel, cash on delivery, price.
@@ -32,6 +34,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   String _type = ParcelTypes.all[1];
   double _kg = 1;
   bool _collectCash = false;
+  PlacePin? _pickupPin;
+  PlacePin? _dropoffPin;
+  String _locating = '';
   bool _loading = true;
   bool _busy = false;
 
@@ -67,6 +72,130 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   double get _codAmount => _collectCash ? (double.tryParse(_cod.text.trim()) ?? 0) : 0;
   double get _fee => _zone == null ? 0 : _pricing.quote(_zone!, _kg, _codAmount);
 
+  void _setPin(bool pickup, PlacePin pin) {
+    setState(() {
+      if (pickup) {
+        _pickupPin = pin;
+        if (_pickup.text.trim().isEmpty && pin.address.isNotEmpty) _pickup.text = pin.address;
+      } else {
+        _dropoffPin = pin;
+        if (_dropoff.text.trim().isEmpty && pin.address.isNotEmpty) _dropoff.text = pin.address;
+      }
+    });
+  }
+
+  Future<void> _withAddress(bool pickup, Future<PlacePin> Function() get) async {
+    setState(() => _locating = pickup ? 'pickup' : 'dropoff');
+    try {
+      final p = await get();
+      final address = p.address.isNotEmpty ? p.address : await LocationTools.addressOf(p.lat, p.lng);
+      if (!mounted) return;
+      _setPin(pickup, PlacePin(p.lat, p.lng, address));
+      showMessage(context, 'Location pinned');
+    } catch (e) {
+      if (mounted) showMessage(context, '$e'.replaceFirst('Exception: ', ''), error: true);
+    } finally {
+      if (mounted) setState(() => _locating = '');
+    }
+  }
+
+  Future<void> _pickOnMap(bool pickup) async {
+    final cur = pickup ? _pickupPin : _dropoffPin;
+    final p = await Navigator.of(context).push<PlacePin>(MaterialPageRoute(
+      builder: (_) => MapPickerScreen(title: pickup ? 'Pickup location' : 'Drop-off location', start: cur),
+    ));
+    if (p != null && mounted) _setPin(pickup, p);
+  }
+
+  Future<void> _pasteLink(bool pickup) async {
+    final clip = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+    final ctrl = TextEditingController(text: clip?.text ?? '');
+    final text = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.of(ctx).viewInsets.bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Paste location link', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            const Text('From WhatsApp: open the shared location → share/copy link. Google Maps links work too.',
+                style: TextStyle(color: AppColors.muted)),
+            const SizedBox(height: 14),
+            TextField(
+              controller: ctrl,
+              maxLines: 3,
+              minLines: 1,
+              decoration: const InputDecoration(hintText: 'https://maps.app.goo.gl/… or 21.54, 39.17'),
+            ),
+            const SizedBox(height: 14),
+            FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: const Text('Use this location')),
+          ],
+        ),
+      ),
+    );
+    if (text == null || text.trim().isEmpty || !mounted) return;
+    await _withAddress(pickup, () => LocationTools.fromText(text));
+  }
+
+  Widget _locationTools(bool pickup) {
+    final pin = pickup ? _pickupPin : _dropoffPin;
+    final busy = _locating == (pickup ? 'pickup' : 'dropoff');
+    if (pin != null) {
+      return Container(
+        margin: const EdgeInsets.only(top: 10),
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        decoration: BoxDecoration(color: AppColors.tealSoft, borderRadius: BorderRadius.circular(12)),
+        child: Row(children: [
+          const Icon(Icons.check_circle, color: AppColors.teal, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Exact location pinned', style: TextStyle(fontWeight: FontWeight.w800, color: AppColors.teal)),
+              Text(pin.short, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+            ]),
+          ),
+          TextButton(onPressed: () => _pickOnMap(pickup), child: const Text('Change')),
+          IconButton(
+            tooltip: 'Remove pin',
+            onPressed: () => setState(() {
+              if (pickup) {
+                _pickupPin = null;
+              } else {
+                _dropoffPin = null;
+              }
+            }),
+            icon: const Icon(Icons.close, size: 18),
+          ),
+        ]),
+      );
+    }
+    Widget chip(IconData icon, String label, VoidCallback onTap) => ActionChip(
+          avatar: Icon(icon, size: 18, color: AppColors.purple),
+          label: Text(label),
+          onPressed: busy ? null : onTap,
+        );
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: busy
+          ? const Row(children: [
+              SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              SizedBox(width: 10),
+              Text('Finding location…'),
+            ])
+          : Wrap(spacing: 8, runSpacing: 8, children: [
+              if (pickup) chip(Icons.my_location, 'My location', () => _withAddress(true, LocationTools.current)),
+              chip(Icons.map_outlined, 'Pick on map', () => _pickOnMap(pickup)),
+              chip(Icons.link, 'Paste WhatsApp link', () => _pasteLink(pickup)),
+              if (!pickup) chip(Icons.my_location, 'I am here', () => _withAddress(false, LocationTools.current)),
+            ]),
+    );
+  }
+
   String? _required(String? v, String what) => (v == null || v.trim().isEmpty) ? 'Enter $what' : null;
 
   String? _phone(String? v) {
@@ -90,8 +219,12 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     try {
       final order = await Backend.instance.createOrder(NewOrder(
         city: zone.name,
-        pickupAddress: _pickup.text.trim(),
-        dropoffAddress: _dropoff.text.trim(),
+        pickupAddress: _pickup.text.trim().isNotEmpty ? _pickup.text.trim() : 'Pinned location ${_pickupPin?.short ?? ''}',
+        dropoffAddress: _dropoff.text.trim().isNotEmpty ? _dropoff.text.trim() : 'Pinned location ${_dropoffPin?.short ?? ''}',
+        pickupLat: _pickupPin?.lat,
+        pickupLng: _pickupPin?.lng,
+        dropoffLat: _dropoffPin?.lat,
+        dropoffLng: _dropoffPin?.lng,
         senderName: _senderName.text.trim(),
         senderPhone: _senderPhone.text.trim(),
         receiverName: _receiverName.text.trim(),
@@ -166,10 +299,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                       minLines: 1,
                       decoration: const InputDecoration(
                         labelText: 'Pickup address',
-                        hintText: 'District, street, building, floor',
+                        hintText: 'District, street, building, floor, landmark',
                       ),
-                      validator: (v) => _required(v, 'the pickup address'),
+                      validator: (v) => _pickupPin != null ? null : _required(v, 'the pickup address or pin it'),
                     ),
+                    _locationTools(true),
                     _gap(),
                     Row(children: [
                       Expanded(
@@ -198,10 +332,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                       minLines: 1,
                       decoration: const InputDecoration(
                         labelText: 'Drop-off address',
-                        hintText: 'District, street, building, floor',
+                        hintText: 'District, street, building, floor, landmark',
                       ),
-                      validator: (v) => _required(v, 'the drop-off address'),
+                      validator: (v) => _dropoffPin != null ? null : _required(v, 'the drop-off address or pin it'),
                     ),
+                    _locationTools(false),
                     _gap(),
                     Row(children: [
                       Expanded(

@@ -234,11 +234,20 @@ Future<void> callNumber(BuildContext context, String phone) async {
   if (!ok && context.mounted) showMessage(context, 'Could not open the phone app.');
 }
 
-Future<void> openMap(BuildContext context, String address) async {
-  final uri = Uri.https('www.google.com', '/maps/search/', {
-    'api': '1',
-    'query': address,
-  });
+/// Opens Google Maps. With coordinates it starts turn-by-turn directions
+/// to the exact pin; otherwise it searches the written address.
+Future<void> openMap(BuildContext context, String address, {double? lat, double? lng}) async {
+  final hasPin = lat != null && lng != null && (lat != 0 || lng != 0);
+  final uri = hasPin
+      ? Uri.https('www.google.com', '/maps/dir/', {
+          'api': '1',
+          'destination': '$lat,$lng',
+          'travelmode': 'driving',
+        })
+      : Uri.https('www.google.com', '/maps/search/', {
+          'api': '1',
+          'query': address,
+        });
   final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
   if (!ok && context.mounted) showMessage(context, 'Could not open maps.');
 }

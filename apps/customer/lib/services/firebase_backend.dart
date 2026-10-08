@@ -170,6 +170,10 @@ class FirebaseBackend implements Backend {
       'codAmount': o.codAmount,
       'deliveryFee': o.deliveryFee,
       'notes': o.notes,
+      if (o.pickupLat != null) 'pickupLat': o.pickupLat,
+      if (o.pickupLng != null) 'pickupLng': o.pickupLng,
+      if (o.dropoffLat != null) 'dropoffLat': o.dropoffLat,
+      if (o.dropoffLng != null) 'dropoffLng': o.dropoffLng,
       'createdAt': FieldValue.serverTimestamp(),
     };
     try {

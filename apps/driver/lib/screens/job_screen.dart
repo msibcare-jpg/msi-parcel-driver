@@ -97,7 +97,7 @@ class _JobScreenState extends State<JobScreen> {
     }
   }
 
-  Widget _contact(String role, String name, String phone, String address) {
+  Widget _contact(String role, String name, String phone, String address, double? lat, double? lng) {
     return Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -124,9 +124,9 @@ class _JobScreenState extends State<JobScreen> {
               if (phone.isNotEmpty) const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => openMap(context, address),
+                  onPressed: () => openMap(context, address, lat: lat, lng: lng),
                   icon: const Icon(Icons.navigation_outlined, size: 18),
-                  label: const Text('Map'),
+                  label: Text(lat != null ? 'Navigate' : 'Map'),
                 ),
               ),
             ],
@@ -144,8 +144,8 @@ class _JobScreenState extends State<JobScreen> {
     final done = j.status == OrderStatus.delivered || j.status == OrderStatus.cancelled;
     // Before pickup the sender matters most; after pickup the receiver.
     final pickupFirst = j.status == OrderStatus.assigned || j.status == OrderStatus.accepted;
-    final pickupCard = _contact('Pickup', j.senderName, j.senderPhone, j.pickupAddress);
-    final dropCard = _contact('Drop-off', j.receiverName, j.receiverPhone, j.dropoffAddress);
+    final pickupCard = _contact('Pickup', j.senderName, j.senderPhone, j.pickupAddress, j.pickupLat, j.pickupLng);
+    final dropCard = _contact('Drop-off', j.receiverName, j.receiverPhone, j.dropoffAddress, j.dropoffLat, j.dropoffLng);
 
     return Scaffold(
       appBar: AppBar(title: Text(j.code)),

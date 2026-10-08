@@ -19,6 +19,10 @@ class DeliveryJob {
   final bool codSettled;
   final DateTime? createdAt;
   final DateTime? deliveredAt;
+  final double? pickupLat;
+  final double? pickupLng;
+  final double? dropoffLat;
+  final double? dropoffLng;
 
   const DeliveryJob({
     required this.id,
@@ -41,6 +45,10 @@ class DeliveryJob {
     this.codSettled = false,
     this.createdAt,
     this.deliveredAt,
+    this.pickupLat,
+    this.pickupLng,
+    this.dropoffLat,
+    this.dropoffLng,
   });
 
   bool get hasCod => codAmount > 0;
@@ -56,6 +64,8 @@ class DeliveryJob {
     } catch (_) {}
     return null;
   }
+
+  static double? _opt(dynamic v) => v is num ? v.toDouble() : null;
 
   static double _num(dynamic v) {
     if (v is num) return v.toDouble();
@@ -86,6 +96,10 @@ class DeliveryJob {
       codSettled: m['codSettled'] == true,
       createdAt: parseTime(m['createdAt']),
       deliveredAt: parseTime(m['deliveredAt']),
+      pickupLat: _opt(m['pickupLat']),
+      pickupLng: _opt(m['pickupLng']),
+      dropoffLat: _opt(m['dropoffLat']),
+      dropoffLng: _opt(m['dropoffLng']),
     );
   }
 
@@ -117,6 +131,10 @@ class DeliveryJob {
       codSettled: codSettled ?? this.codSettled,
       createdAt: createdAt,
       deliveredAt: deliveredAt ?? this.deliveredAt,
+      pickupLat: pickupLat,
+      pickupLng: pickupLng,
+      dropoffLat: dropoffLat,
+      dropoffLng: dropoffLng,
     );
   }
 }
